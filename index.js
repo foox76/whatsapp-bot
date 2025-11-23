@@ -1,25 +1,52 @@
-try {
-    await doc.loadInfo();
-    const sheet = doc.sheetsByIndex[0]; // Assume first sheet
-    const rows = await sheet.getRows();
+require('dotenv').config();
+const express = require('express');
+const bodyParser = require('body-parser');
+const { MessagingResponse } = require('twilio').twiml;
+const { GoogleGenerativeAI } = require('@google/generative-ai');
+const { JWT } = require('google-auth-library');
+const { GoogleSpreadsheet } = require('google-spreadsheet');
 
-    // Simple logic: Check if any row has this date and is "Booked"
-    // In a real app, you'd have a list of slots and subtract booked ones.
-    // For now, let's assume we just list what IS booked to the AI, and it figures out the rest.
+const app = express();
+const port = process.env.PORT || 3000;
 
-    const bookedSlots = rows
-        .filter(row => row.get('Date') === date)
-        .map(row => row.get('Time'));
+// Initialize Google Sheets
+// Note: We use Environment Variables for Render
+const SHEET_ID = process.env.GOOGLE_SHEET_ID || '1k-zYD8fGlyYNzFvZpVha7IeP_sZNd1ga-L5lLQ9D36U'; // Fallback for local testing if needed
+const serviceAccountAuth = new JWT({
+    email: process.env.GOOGLE_CLIENT_EMAIL,
+    key: process.env.GOOGLE_PRIVATE_KEY ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
+    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
+});
+const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
 
-    return {
-        date: date,
-        booked_slots: bookedSlots,
-        message: bookedSlots.length > 0 ? `Booked slots on ${date}: ${bookedSlots.join(', ')}` : `No bookings found for ${date}. All slots open.`
-    };
-} catch (error) {
-    console.error("Sheet Error:", error);
-    return { error: "Failed to check availability." };
-}
+// Initialize Gemini API
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
+// Store conversation history in memory
+const sessions = {};
+
+// --- TOOLS ---
+
+// Tool 1: Check Availability
+async function checkAvailability(date) {
+    try {
+        await doc.loadInfo();
+        const sheet = doc.sheetsByIndex[0]; // Assume first sheet
+        const rows = await sheet.getRows();
+
+        const bookedSlots = rows
+            .filter(row => row.get('Date') === date)
+            .map(row => row.get('Time'));
+
+        return {
+            date: date,
+            booked_slots: bookedSlots,
+            message: bookedSlots.length > 0 ? `Booked slots on ${date}: ${bookedSlots.join(', ')}` : `No bookings found for ${date}. All slots open.`
+        };
+    } catch (error) {
+        console.error("Sheet Error:", error);
+        return { error: "Failed to check availability." };
+    }
 }
 
 // Tool 2: Book Appointment
