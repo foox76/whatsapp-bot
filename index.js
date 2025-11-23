@@ -1,45 +1,91 @@
-require('dotenv').config();
-const express = require('express');
-const bodyParser = require('body-parser');
-const { MessagingResponse } = require('twilio').twiml;
-const { GoogleGenerativeAI } = require('@google/generative-ai');
+try {
+    await doc.loadInfo();
+    const sheet = doc.sheetsByIndex[0]; // Assume first sheet
+    const rows = await sheet.getRows();
 
-const app = express();
-const port = process.env.PORT || 3000;
+    // Simple logic: Check if any row has this date and is "Booked"
+    // In a real app, you'd have a list of slots and subtract booked ones.
+    // For now, let's assume we just list what IS booked to the AI, and it figures out the rest.
 
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+    const bookedSlots = rows
+        .filter(row => row.get('Date') === date)
+        .map(row => row.get('Time'));
 
-// Store conversation history in memory
-// Key: Sender Phone Number, Value: ChatSession object
-const sessions = {};
+    return {
+        date: date,
+        booked_slots: bookedSlots,
+        message: bookedSlots.length > 0 ? `Booked slots on ${date}: ${bookedSlots.join(', ')}` : `No bookings found for ${date}. All slots open.`
+    };
+} catch (error) {
+    console.error("Sheet Error:", error);
+    return { error: "Failed to check availability." };
+}
+}
+
+// Tool 2: Book Appointment
+async function bookAppointment(name, phone, date, time) {
+    try {
+        await doc.loadInfo();
+        const sheet = doc.sheetsByIndex[0];
+        await sheet.addRow({
+            Name: name,
+            Phone: phone,
+            Date: date,
+            Time: time,
+            Status: 'Confirmed'
+        });
+        return { success: true, message: `Appointment booked for ${name} on ${date} at ${time}.` };
+    } catch (error) {
+        console.error("Sheet Error:", error);
+        return { error: "Failed to book appointment." };
+    }
+}
+
+// Tool Definitions for Gemini
+const tools = [
+    {
+        function_declarations: [
+            {
+                name: "check_availability",
+                description: "Check available appointment slots for a specific date.",
+                parameters: {
+                    type: "OBJECT",
+                    properties: {
+                        date: { type: "STRING", description: "Date in YYYY-MM-DD format" }
+                    },
+                    required: ["date"]
+                }
+            },
+            {
+                name: "book_appointment",
+                description: "Book a new appointment for a patient.",
+                parameters: {
+                    type: "OBJECT",
+                    properties: {
+                        name: { type: "STRING", description: "Patient's name" },
+                        phone: { type: "STRING", description: "Patient's phone number" },
+                        date: { type: "STRING", description: "Date in YYYY-MM-DD format" },
+                        time: { type: "STRING", description: "Time of appointment (e.g., 10:00 AM)" }
+                    },
+                    required: ["name", "phone", "date", "time"]
+                }
+            }
+        ]
+    }
+];
 
 const SYSTEM_INSTRUCTION = `
-You are Rayan, the friendly and welcoming receptionist at Horizon Dental in Muscat, Al Khoud.
-Your goal is to help patients book appointments and answer their questions.
+You are Rayan, the friendly receptionist at Horizon Dental in Muscat, Al Khoud.
+Hours: 9:00 AM - 9:00 PM, Sat-Thu. Closed Friday.
 
-**Clinic Details:**
-- **Name:** Horizon Dental
-- **Location:** Muscat, Al Khoud
-- **Hours:** 9:00 AM to 9:00 PM, Saturday to Thursday.
-- **Closed:** Fridays.
+**Goal**: Help patients book appointments using your tools.
 
-**Personality & Tone:**
-- You are human-like, warm, and have a likeable personality.
-- Do NOT sound robotic. Be conversational.
-- Do NOT explicitly state you are an AI unless asked directly.
-
-**Language Rules:**
-- **Arabic:** If the user writes in Arabic, you MUST reply in **Omani Arabic dialect**. This is critical.
-- **English:** If the user writes in English, reply in English.
-
-**Booking Handling:**
-- If a user wants to book, ask for their preferred day and time.
-- If they ask for a time outside working hours (e.g., Friday or 10 PM), politely inform them of the working hours and suggest the next available slot.
-- Since you cannot access the real calendar yet, just collect their preferred time and say "I will check with the doctor and confirm with you shortly."
-
-**Context:**
-- Users are coming from Google Ads, so be efficient but very welcoming.
+**Rules**:
+1. **Check First**: Before booking, ALWAYS use \`check_availability(date)\` to see if the requested time is taken.
+2. **Book Second**: If the slot is free, use \`book_appointment\` to save it.
+3. **Format**: Ask for Date (YYYY-MM-DD) and Time if not provided.
+4. **Language**: Omani Arabic for Arabic speakers. English for English speakers.
+5. **Context**: Today is ${new Date().toISOString().split('T')[0]}.
 `;
 
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -54,35 +100,54 @@ app.post('/whatsapp', async (req, res) => {
     const twiml = new MessagingResponse();
 
     try {
-        // Initialize model with system instruction
+        // Get model with tools
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
-            systemInstruction: SYSTEM_INSTRUCTION
+            systemInstruction: SYSTEM_INSTRUCTION,
+            tools: tools
         });
 
-        // Get or create chat session
+        // Start/Get Chat
         if (!sessions[sender]) {
             sessions[sender] = model.startChat({
                 history: [],
-                generationConfig: {
-                    maxOutputTokens: 200, // Keep replies concise for WhatsApp
-                },
             });
         }
-
         const chat = sessions[sender];
 
-        // Generate response
+        // Send message
         const result = await chat.sendMessage(incomingMsg);
         const response = await result.response;
-        const text = response.text();
+
+        // Handle Function Calls
+        const functionCalls = response.functionCalls();
+        let text = "";
+
+        if (functionCalls && functionCalls.length > 0) {
+            const call = functionCalls[0];
+            const apiResponse = call.name === "check_availability"
+                ? await checkAvailability(call.args.date)
+                : await bookAppointment(call.args.name, call.args.phone, call.args.date, call.args.time);
+
+            // Send API result back to model to get final natural language response
+            const result2 = await chat.sendMessage([
+                {
+                    functionResponse: {
+                        name: call.name,
+                        response: apiResponse
+                    }
+                }
+            ]);
+            text = result2.response.text();
+        } else {
+            text = response.text();
+        }
 
         twiml.message(text);
     } catch (error) {
-        console.error('Error generating response:', error);
-        // In case of error, try to reset session
+        console.error('Error:', error);
         delete sessions[sender];
-        twiml.message(`Sorry, I'm having a little trouble right now. Could you say that again?`);
+        twiml.message(`Sorry, I encountered an error. Please try again.`);
     }
 
     res.type('text/xml').send(twiml.toString());
