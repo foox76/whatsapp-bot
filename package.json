@@ -1,0 +1,27 @@
+{
+    "name": "whatsapp-ai-receptionist",
+    "version": "1.0.0",
+    "description": "AI-powered WhatsApp receptionist using Twilio and Google Gemini",
+    "main": "index.js",
+    "scripts": {
+        "start": "node index.js",
+        "dev": "nodemon index.js",
+        "tunnel": "lt --port 3000",
+        "serveo": "ssh -R 80:localhost:3000 serveo.net",
+        "ssh-tunnel": "ssh -R 80:localhost:3000 nokey@localhost.run"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "@google/generative-ai": "^0.21.0",
+        "body-parser": "^1.20.2",
+        "dotenv": "^16.3.1",
+        "express": "^4.18.2",
+        "twilio": "^4.19.0"
+    },
+    "devDependencies": {
+        "localtunnel": "^2.0.2",
+        "nodemon": "^3.0.1"
+    }
+}
