@@ -17,6 +17,9 @@ const port = process.env.PORT || 3000;
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+// Store conversation history in memory
+const sessions = {};
+
 // --- TOOLS ---
 // Tools are now imported from ./tools.js
 
