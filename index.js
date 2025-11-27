@@ -137,17 +137,26 @@ Hours: 9:00 AM - 9:00 PM, Sat-Thu. Closed Friday.
 // --- API ENDPOINTS FOR DASHBOARD ---
 
 // Doctors
-app.get('/api/doctors', async (req, res) => res.json(await getDoctors()));
+app.get('/api/doctors', async (req, res) => {
+    const result = await getDoctors();
+    res.json(result.doctors || []);
+});
 app.post('/api/doctors', async (req, res) => res.json(await addDoctor(req.body.name, req.body.specialty, req.body.availability)));
 app.delete('/api/doctors', async (req, res) => res.json(await deleteDoctor(req.body.name)));
 
 // Services
-app.get('/api/services', async (req, res) => res.json(await getServices()));
+app.get('/api/services', async (req, res) => {
+    const result = await getServices();
+    res.json(result.services || []);
+});
 app.post('/api/services', async (req, res) => res.json(await addService(req.body.service, req.body.price, req.body.description)));
 app.delete('/api/services', async (req, res) => res.json(await deleteService(req.body.service)));
 
 // FAQ
-app.get('/api/faq', async (req, res) => res.json(await getFAQ()));
+app.get('/api/faq', async (req, res) => {
+    const result = await getFAQ();
+    res.json(result.faq || []);
+});
 app.post('/api/faq', async (req, res) => res.json(await addFAQ(req.body.question, req.body.answer)));
 app.delete('/api/faq', async (req, res) => res.json(await deleteFAQ(req.body.question)));
 

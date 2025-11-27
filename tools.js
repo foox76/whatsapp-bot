@@ -162,14 +162,15 @@ async function getDoctors() {
     try {
         const sheet = await getSheet('Doctors', ['Name', 'Specialty', 'Availability']);
         const rows = await sheet.getRows();
-        return rows.map(row => ({
+        const doctors = rows.map(row => ({
             name: row.get('Name'),
             specialty: row.get('Specialty'),
             availability: row.get('Availability')
         }));
+        return { doctors: doctors };
     } catch (error) {
         console.error("Sheet Error:", error);
-        return [];
+        return { doctors: [], error: "Failed to retrieve doctors." };
     }
 }
 
@@ -200,14 +201,15 @@ async function getServices() {
     try {
         const sheet = await getSheet('Services', ['Service', 'Price', 'Description']);
         const rows = await sheet.getRows();
-        return rows.map(row => ({
+        const services = rows.map(row => ({
             service: row.get('Service'),
             price: row.get('Price'),
             description: row.get('Description')
         }));
+        return { services: services };
     } catch (error) {
         console.error("Sheet Error:", error);
-        return [];
+        return { services: [], error: "Failed to retrieve services." };
     }
 }
 
@@ -238,13 +240,14 @@ async function getFAQ() {
     try {
         const sheet = await getSheet('FAQ', ['Question', 'Answer']);
         const rows = await sheet.getRows();
-        return rows.map(row => ({
+        const faq = rows.map(row => ({
             question: row.get('Question'),
             answer: row.get('Answer')
         }));
+        return { faq: faq };
     } catch (error) {
         console.error("Sheet Error:", error);
-        return [];
+        return { faq: [], error: "Failed to retrieve FAQ." };
     }
 }
 
