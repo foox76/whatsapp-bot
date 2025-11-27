@@ -8,11 +8,19 @@ const {
     bookAppointment,
     getAppointment,
     cancelAppointment,
-    modifyAppointment
+    modifyAppointment,
+    // KB
+    getDoctors, addDoctor, deleteDoctor,
+    getServices, addService, deleteService,
+    getFAQ, addFAQ, deleteFAQ
 } = require('./tools');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Serve static files (Dashboard)
+app.use(express.static('public'));
+app.use(bodyParser.json());
 
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
@@ -88,6 +96,22 @@ const tools = [
                     },
                     required: ["phone", "oldDate", "newDate", "newTime"]
                 }
+            },
+            // Knowledge Base Tools
+            {
+                name: "get_doctor_info",
+                description: "Get information about doctors and their specialties.",
+                parameters: { type: "OBJECT", properties: {}, required: [] }
+            },
+            {
+                name: "get_service_price",
+                description: "Get price list and description of services.",
+                parameters: { type: "OBJECT", properties: {}, required: [] }
+            },
+            {
+                name: "get_clinic_faq",
+                description: "Get answers to common questions (insurance, parking, etc).",
+                parameters: { type: "OBJECT", properties: {}, required: [] }
             }
         ]
     }
@@ -97,17 +121,35 @@ const SYSTEM_INSTRUCTION = `
 You are Rayan, the friendly receptionist at Horizon Dental in Muscat, Al Khoud.
 Hours: 9:00 AM - 9:00 PM, Sat-Thu. Closed Friday.
 
-**Goal**: Help patients book, modify, or cancel appointments using your tools.
+**Goal**: Help patients book appointments and answer questions using your tools.
 
 **Rules**:
 1. **Check First**: Before booking or modifying, ALWAYS use \`check_availability(date)\` to see if the requested time is taken.
 2. **Book/Modify**: Use \`book_appointment\` or \`modify_appointment\` as requested.
 3. **Cancel**: Use \`cancel_appointment\` if the user wants to cancel.
 4. **Reminders**: Use \`get_appointment\` if the user asks for their appointment details.
-5. **Format**: Ask for Date (YYYY-MM-DD) and Time if not provided.
-6. **Language**: Omani Arabic for Arabic speakers. English for English speakers.
-7. **Context**: Today is ${new Date().toISOString().split('T')[0]}.
+5. **Info**: Use \`get_doctor_info\`, \`get_service_price\`, or \`get_clinic_faq\` to answer questions.
+6. **Format**: Ask for Date (YYYY-MM-DD) and Time if not provided.
+7. **Language**: Omani Arabic for Arabic speakers. English for English speakers.
+8. **Context**: Today is ${new Date().toISOString().split('T')[0]}.
 `;
+
+// --- API ENDPOINTS FOR DASHBOARD ---
+
+// Doctors
+app.get('/api/doctors', async (req, res) => res.json(await getDoctors()));
+app.post('/api/doctors', async (req, res) => res.json(await addDoctor(req.body.name, req.body.specialty, req.body.availability)));
+app.delete('/api/doctors', async (req, res) => res.json(await deleteDoctor(req.body.name)));
+
+// Services
+app.get('/api/services', async (req, res) => res.json(await getServices()));
+app.post('/api/services', async (req, res) => res.json(await addService(req.body.service, req.body.price, req.body.description)));
+app.delete('/api/services', async (req, res) => res.json(await deleteService(req.body.service)));
+
+// FAQ
+app.get('/api/faq', async (req, res) => res.json(await getFAQ()));
+app.post('/api/faq', async (req, res) => res.json(await addFAQ(req.body.question, req.body.answer)));
+app.delete('/api/faq', async (req, res) => res.json(await deleteFAQ(req.body.question)));
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
@@ -158,6 +200,12 @@ app.post('/whatsapp', async (req, res) => {
                 apiResponse = await cancelAppointment(call.args.phone, call.args.date);
             } else if (call.name === "modify_appointment") {
                 apiResponse = await modifyAppointment(call.args.phone, call.args.oldDate, call.args.newDate, call.args.newTime);
+            } else if (call.name === "get_doctor_info") {
+                apiResponse = await getDoctors();
+            } else if (call.name === "get_service_price") {
+                apiResponse = await getServices();
+            } else if (call.name === "get_clinic_faq") {
+                apiResponse = await getFAQ();
             }
 
             // Send API result back to model to get final natural language response

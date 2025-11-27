@@ -26,16 +26,20 @@ if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
 }
 const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
 
-// Helper to get the sheet
-async function getSheet() {
+// Helper to get a specific sheet by title, creating it if it doesn't exist
+async function getSheet(title, headerValues) {
     await doc.loadInfo();
-    return doc.sheetsByIndex[0];
+    let sheet = doc.sheetsByTitle[title];
+    if (!sheet) {
+        sheet = await doc.addSheet({ title: title, headerValues: headerValues });
+    }
+    return sheet;
 }
 
-// Tool 1: Check Availability
+// --- APPOINTMENTS ---
 async function checkAvailability(date) {
     try {
-        const sheet = await getSheet();
+        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
         const bookedSlots = rows
@@ -56,7 +60,7 @@ async function checkAvailability(date) {
 // Tool 2: Book Appointment
 async function bookAppointment(name, phone, date, time) {
     try {
-        const sheet = await getSheet();
+        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         await sheet.addRow({
             Name: name,
             Phone: phone,
@@ -74,7 +78,7 @@ async function bookAppointment(name, phone, date, time) {
 // Tool 3: Get Appointment (Reminder)
 async function getAppointment(phone) {
     try {
-        const sheet = await getSheet();
+        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
         // STRICT FILTERING by phone number for privacy
@@ -100,7 +104,7 @@ async function getAppointment(phone) {
 // Tool 4: Cancel Appointment
 async function cancelAppointment(phone, date) {
     try {
-        const sheet = await getSheet();
+        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
         // Find the appointment to delete
@@ -123,7 +127,7 @@ async function cancelAppointment(phone, date) {
 // Tool 5: Modify Appointment
 async function modifyAppointment(phone, oldDate, newDate, newTime) {
     try {
-        const sheet = await getSheet();
+        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
         // 1. Check if new slot is available
@@ -151,10 +155,129 @@ async function modifyAppointment(phone, oldDate, newDate, newTime) {
     }
 }
 
+// --- KNOWLEDGE BASE (CRUD) ---
+
+// 1. DOCTORS
+async function getDoctors() {
+    try {
+        const sheet = await getSheet('Doctors', ['Name', 'Specialty', 'Availability']);
+        const rows = await sheet.getRows();
+        return rows.map(row => ({
+            name: row.get('Name'),
+            specialty: row.get('Specialty'),
+            availability: row.get('Availability')
+        }));
+    } catch (error) {
+        console.error("Sheet Error:", error);
+        return [];
+    }
+}
+
+async function addDoctor(name, specialty, availability) {
+    try {
+        const sheet = await getSheet('Doctors', ['Name', 'Specialty', 'Availability']);
+        await sheet.addRow({ Name: name, Specialty: specialty, Availability: availability });
+        return { success: true };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+async function deleteDoctor(name) {
+    try {
+        const sheet = await getSheet('Doctors', ['Name', 'Specialty', 'Availability']);
+        const rows = await sheet.getRows();
+        const row = rows.find(r => r.get('Name') === name);
+        if (row) await row.delete();
+        return { success: true };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+// 2. SERVICES
+async function getServices() {
+    try {
+        const sheet = await getSheet('Services', ['Service', 'Price', 'Description']);
+        const rows = await sheet.getRows();
+        return rows.map(row => ({
+            service: row.get('Service'),
+            price: row.get('Price'),
+            description: row.get('Description')
+        }));
+    } catch (error) {
+        console.error("Sheet Error:", error);
+        return [];
+    }
+}
+
+async function addService(service, price, description) {
+    try {
+        const sheet = await getSheet('Services', ['Service', 'Price', 'Description']);
+        await sheet.addRow({ Service: service, Price: price, Description: description });
+        return { success: true };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+async function deleteService(serviceName) {
+    try {
+        const sheet = await getSheet('Services', ['Service', 'Price', 'Description']);
+        const rows = await sheet.getRows();
+        const row = rows.find(r => r.get('Service') === serviceName);
+        if (row) await row.delete();
+        return { success: true };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+// 3. FAQ
+async function getFAQ() {
+    try {
+        const sheet = await getSheet('FAQ', ['Question', 'Answer']);
+        const rows = await sheet.getRows();
+        return rows.map(row => ({
+            question: row.get('Question'),
+            answer: row.get('Answer')
+        }));
+    } catch (error) {
+        console.error("Sheet Error:", error);
+        return [];
+    }
+}
+
+async function addFAQ(question, answer) {
+    try {
+        const sheet = await getSheet('FAQ', ['Question', 'Answer']);
+        await sheet.addRow({ Question: question, Answer: answer });
+        return { success: true };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
+async function deleteFAQ(question) {
+    try {
+        const sheet = await getSheet('FAQ', ['Question', 'Answer']);
+        const rows = await sheet.getRows();
+        const row = rows.find(r => r.get('Question') === question);
+        if (row) await row.delete();
+        return { success: true };
+    } catch (error) {
+        return { error: error.message };
+    }
+}
+
 module.exports = {
     checkAvailability,
     bookAppointment,
     getAppointment,
     cancelAppointment,
-    modifyAppointment
+    modifyAppointment,
+    // KB
+    getDoctors, addDoctor, deleteDoctor,
+    getServices, addService, deleteService,
+    getFAQ, addFAQ, deleteFAQ
 };

@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Horizon AI Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="app-container">
+        <nav class="sidebar">
+            <div class="logo">
+                <i class="fas fa-tooth"></i> Horizon AI
+            </div>
+            <ul class="nav-links">
+                <li class="active" onclick="showTab('doctors')"><i class="fas fa-user-md"></i> Doctors</li>
+                <li onclick="showTab('services')"><i class="fas fa-tags"></i> Services</li>
+                <li onclick="showTab('faq')"><i class="fas fa-question-circle"></i> FAQ</li>
+            </ul>
+        </nav>
+
+        <main class="content">
+            <!-- Doctors Tab -->
+            <div id="doctors" class="tab-content active">
+                <header>
+                    <h1>Doctors Management</h1>
+                    <button class="btn-primary" onclick="openModal('doctor-modal')">+ Add Doctor</button>
+                </header>
+                <div class="card-grid" id="doctors-list">
+                    <!-- Loaded via JS -->
+                </div>
+            </div>
+
+            <!-- Services Tab -->
+            <div id="services" class="tab-content">
+                <header>
+                    <h1>Services & Pricing</h1>
+                    <button class="btn-primary" onclick="openModal('service-modal')">+ Add Service</button>
+                </header>
+                <div class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Service</th>
+                                <th>Price</th>
+                                <th>Description</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody id="services-list">
+                            <!-- Loaded via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- FAQ Tab -->
+            <div id="faq" class="tab-content">
+                <header>
+                    <h1>Knowledge Base (FAQ)</h1>
+                    <button class="btn-primary" onclick="openModal('faq-modal')">+ Add FAQ</button>
+                </header>
+                <div class="faq-list" id="faq-list">
+                    <!-- Loaded via JS -->
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="doctor-modal" class="modal">
+        <div class="modal-content">
+            <h2>Add New Doctor</h2>
+            <input type="text" id="doc-name" placeholder="Doctor Name (e.g. Dr. Sarah)">
+            <input type="text" id="doc-specialty" placeholder="Specialty (e.g. Orthodontist)">
+            <input type="text" id="doc-availability" placeholder="Availability (e.g. Mon, Wed)">
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal('doctor-modal')">Cancel</button>
+                <button class="btn-primary" onclick="addDoctor()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="service-modal" class="modal">
+        <div class="modal-content">
+            <h2>Add New Service</h2>
+            <input type="text" id="serv-name" placeholder="Service Name (e.g. Root Canal)">
+            <input type="text" id="serv-price" placeholder="Price (e.g. 50 OMR)">
+            <input type="text" id="serv-desc" placeholder="Description">
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal('service-modal')">Cancel</button>
+                <button class="btn-primary" onclick="addService()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="faq-modal" class="modal">
+        <div class="modal-content">
+            <h2>Add FAQ</h2>
+            <input type="text" id="faq-question" placeholder="Question">
+            <textarea id="faq-answer" placeholder="Answer"></textarea>
+            <div class="modal-actions">
+                <button class="btn-secondary" onclick="closeModal('faq-modal')">Cancel</button>
+                <button class="btn-primary" onclick="addFAQ()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
