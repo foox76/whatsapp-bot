@@ -3,70 +3,22 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const { MessagingResponse } = require('twilio').twiml;
 const { GoogleGenerativeAI } = require('@google/generative-ai');
-const { JWT } = require('google-auth-library');
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+const {
+    checkAvailability,
+    bookAppointment,
+    getAppointment,
+    cancelAppointment,
+    modifyAppointment
+} = require('./tools');
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Initialize Google Sheets
-// Note: We use Environment Variables for Render
-const SHEET_ID = process.env.GOOGLE_SHEET_ID || '1k-zYD8fGlyYNzFvZpVha7IeP_sZNd1ga-L5lLQ9D36U'; // Fallback for local testing if needed
-const serviceAccountAuth = new JWT({
-    email: process.env.GOOGLE_CLIENT_EMAIL,
-    key: process.env.GOOGLE_PRIVATE_KEY ? process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n') : undefined,
-    scopes: ['https://www.googleapis.com/auth/spreadsheets'],
-});
-const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
-
 // Initialize Gemini API
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
-// Store conversation history in memory
-const sessions = {};
-
 // --- TOOLS ---
-
-// Tool 1: Check Availability
-async function checkAvailability(date) {
-    try {
-        await doc.loadInfo();
-        const sheet = doc.sheetsByIndex[0]; // Assume first sheet
-        const rows = await sheet.getRows();
-
-        const bookedSlots = rows
-            .filter(row => row.get('Date') === date)
-            .map(row => row.get('Time'));
-
-        return {
-            date: date,
-            booked_slots: bookedSlots,
-            message: bookedSlots.length > 0 ? `Booked slots on ${date}: ${bookedSlots.join(', ')}` : `No bookings found for ${date}. All slots open.`
-        };
-    } catch (error) {
-        console.error("Sheet Error:", error);
-        return { error: "Failed to check availability." };
-    }
-}
-
-// Tool 2: Book Appointment
-async function bookAppointment(name, phone, date, time) {
-    try {
-        await doc.loadInfo();
-        const sheet = doc.sheetsByIndex[0];
-        await sheet.addRow({
-            Name: name,
-            Phone: phone,
-            Date: date,
-            Time: time,
-            Status: 'Confirmed'
-        });
-        return { success: true, message: `Appointment booked for ${name} on ${date} at ${time}.` };
-    } catch (error) {
-        console.error("Sheet Error:", error);
-        return { error: "Failed to book appointment." };
-    }
-}
+// Tools are now imported from ./tools.js
 
 // Tool Definitions for Gemini
 const tools = [
@@ -96,6 +48,43 @@ const tools = [
                     },
                     required: ["name", "phone", "date", "time"]
                 }
+            },
+            {
+                name: "get_appointment",
+                description: "Get upcoming appointments for a patient to send reminders or check details.",
+                parameters: {
+                    type: "OBJECT",
+                    properties: {
+                        phone: { type: "STRING", description: "Patient's phone number" }
+                    },
+                    required: ["phone"]
+                }
+            },
+            {
+                name: "cancel_appointment",
+                description: "Cancel an existing appointment.",
+                parameters: {
+                    type: "OBJECT",
+                    properties: {
+                        phone: { type: "STRING", description: "Patient's phone number" },
+                        date: { type: "STRING", description: "Date of the appointment to cancel (YYYY-MM-DD)" }
+                    },
+                    required: ["phone", "date"]
+                }
+            },
+            {
+                name: "modify_appointment",
+                description: "Modify or reschedule an existing appointment.",
+                parameters: {
+                    type: "OBJECT",
+                    properties: {
+                        phone: { type: "STRING", description: "Patient's phone number" },
+                        oldDate: { type: "STRING", description: "Original date of the appointment (YYYY-MM-DD)" },
+                        newDate: { type: "STRING", description: "New date for the appointment (YYYY-MM-DD)" },
+                        newTime: { type: "STRING", description: "New time for the appointment" }
+                    },
+                    required: ["phone", "oldDate", "newDate", "newTime"]
+                }
             }
         ]
     }
@@ -105,14 +94,16 @@ const SYSTEM_INSTRUCTION = `
 You are Rayan, the friendly receptionist at Horizon Dental in Muscat, Al Khoud.
 Hours: 9:00 AM - 9:00 PM, Sat-Thu. Closed Friday.
 
-**Goal**: Help patients book appointments using your tools.
+**Goal**: Help patients book, modify, or cancel appointments using your tools.
 
 **Rules**:
-1. **Check First**: Before booking, ALWAYS use \`check_availability(date)\` to see if the requested time is taken.
-2. **Book Second**: If the slot is free, use \`book_appointment\` to save it.
-3. **Format**: Ask for Date (YYYY-MM-DD) and Time if not provided.
-4. **Language**: Omani Arabic for Arabic speakers. English for English speakers.
-5. **Context**: Today is ${new Date().toISOString().split('T')[0]}.
+1. **Check First**: Before booking or modifying, ALWAYS use \`check_availability(date)\` to see if the requested time is taken.
+2. **Book/Modify**: Use \`book_appointment\` or \`modify_appointment\` as requested.
+3. **Cancel**: Use \`cancel_appointment\` if the user wants to cancel.
+4. **Reminders**: Use \`get_appointment\` if the user asks for their appointment details.
+5. **Format**: Ask for Date (YYYY-MM-DD) and Time if not provided.
+6. **Language**: Omani Arabic for Arabic speakers. English for English speakers.
+7. **Context**: Today is ${new Date().toISOString().split('T')[0]}.
 `;
 
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -152,9 +143,19 @@ app.post('/whatsapp', async (req, res) => {
 
         if (functionCalls && functionCalls.length > 0) {
             const call = functionCalls[0];
-            const apiResponse = call.name === "check_availability"
-                ? await checkAvailability(call.args.date)
-                : await bookAppointment(call.args.name, call.args.phone, call.args.date, call.args.time);
+            let apiResponse;
+
+            if (call.name === "check_availability") {
+                apiResponse = await checkAvailability(call.args.date);
+            } else if (call.name === "book_appointment") {
+                apiResponse = await bookAppointment(call.args.name, call.args.phone, call.args.date, call.args.time);
+            } else if (call.name === "get_appointment") {
+                apiResponse = await getAppointment(call.args.phone);
+            } else if (call.name === "cancel_appointment") {
+                apiResponse = await cancelAppointment(call.args.phone, call.args.date);
+            } else if (call.name === "modify_appointment") {
+                apiResponse = await modifyAppointment(call.args.phone, call.args.oldDate, call.args.newDate, call.args.newTime);
+            }
 
             // Send API result back to model to get final natural language response
             const result2 = await chat.sendMessage([
