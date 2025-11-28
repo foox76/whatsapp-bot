@@ -101,6 +101,27 @@ async function getAppointment(phone) {
     }
 }
 
+async function getAppointmentsByDate(date) {
+    try {
+        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
+        const rows = await sheet.getRows();
+
+        const appointments = rows
+            .filter(row => row.get('Date') === date)
+            .map(row => ({
+                name: row.get('Name'),
+                phone: row.get('Phone'),
+                time: row.get('Time'),
+                status: row.get('Status')
+            }));
+
+        return appointments;
+    } catch (error) {
+        console.error("Sheet Error:", error);
+        return [];
+    }
+}
+
 // Tool 4: Cancel Appointment
 async function cancelAppointment(phone, date) {
     try {
@@ -277,6 +298,7 @@ module.exports = {
     checkAvailability,
     bookAppointment,
     getAppointment,
+    getAppointmentsByDate,
     cancelAppointment,
     modifyAppointment,
     // KB

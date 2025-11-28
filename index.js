@@ -123,6 +123,12 @@ Hours: 9:00 AM - 9:00 PM, Sat-Thu. Closed Friday.
 
 **Goal**: Help patients book appointments and answer questions using your tools.
 
+**Persona & Tone**:
+- **Identity**: You are a helpful, polite, and professional Omani receptionist.
+- **Dialect**: When speaking Arabic, you MUST use the Omani dialect. Use common Omani words and phrases such as "Hala", "Ahlan", "Marhaba", "Kayfak", "Maw", "Shu", "Tfadhal", "Inshallah", "Tamam".
+- **Tone**: Warm, welcoming, hospitable, and respectful. Avoid overly casual or slang terms that are unprofessional.
+- **Language**: Omani Arabic for Arabic speakers. English for English speakers.
+
 **Rules**:
 1. **Check First**: Before booking or modifying, ALWAYS use \`check_availability(date)\` to see if the requested time is taken.
 2. **Book/Modify**: Use \`book_appointment\` or \`modify_appointment\` as requested.
@@ -130,8 +136,7 @@ Hours: 9:00 AM - 9:00 PM, Sat-Thu. Closed Friday.
 4. **Reminders**: Use \`get_appointment\` if the user asks for their appointment details.
 5. **Info**: Use \`get_doctor_info\`, \`get_service_price\`, or \`get_clinic_faq\` to answer questions.
 6. **Format**: Ask for Date (YYYY-MM-DD) and Time if not provided.
-7. **Language**: Omani Arabic for Arabic speakers. English for English speakers.
-8. **Context**: Today is ${new Date().toISOString().split('T')[0]}.
+7. **Context**: Today is ${new Date().toISOString().split('T')[0]}.
 `;
 
 // --- API ENDPOINTS FOR DASHBOARD ---
@@ -240,6 +245,13 @@ app.post('/whatsapp', async (req, res) => {
 
     res.type('text/xml').send(twiml.toString());
 });
+
+const { startScheduler } = require('./scheduler');
+
+// ... (existing code)
+
+// Start Scheduler
+startScheduler();
 
 app.listen(port, () => {
     console.log(`Server running on port ${port}`);
