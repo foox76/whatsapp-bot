@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Business Dashboard - SaaS Platform</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="logo">
+                <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+                    <rect width="32" height="32" rx="10" fill="url(#gradient)" />
+                    <path d="M16 10L22 16L16 22L10 16L16 10Z" fill="white" />
+                    <defs>
+                        <linearGradient id="gradient" x1="0" y1="0" x2="32" y2="32">
+                            <stop offset="0%" stop-color="#6366f1" />
+                            <stop offset="100%" stop-color="#8b5cf6" />
+                        </linearGradient>
+                    </defs>
+                </svg>
+                <span>SaaS Bot</span>
+            </div>
+
+            <nav>
+                <ul class="nav-links">
+                    <li class="active">
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="3" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="3" width="7" height="7" rx="1" />
+                            <rect x="14" y="14" width="7" height="7" rx="1" />
+                            <rect x="3" y="14" width="7" height="7" rx="1" />
+                        </svg>
+                        Dashboard
+                    </li>
+                    <li>
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                        </svg>
+                        Analytics
+                    </li>
+                    <li>
+                        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"
+                            stroke-linecap="round" stroke-linejoin="round">
+                            <path <p>Manage and monitor your AI chatbot clients</p>
+    </div>
+    <button class="btn-primary" id="openModalBtn">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"
+            stroke-linejoin="round">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+        Add Business
+    </button>
+    </header>
+
+    <!-- Stats -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-icon">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M3 21h18" />
+                    <path d="M5 21V7l8-4 8 4v14" />
+                    <path d="M17 21v-8.5a1.5 1.5 0 00-1.5-1.5h-5a1.5 1.5 0 00-1.5 1.5V21" />
+                </svg>
+            </div>
+            <div>
+                <p class="stat-label">Total Businesses</p>
+                <p class="stat-value" id="totalBusinesses">0</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+                </svg>
+            </div>
+            <div>
+                <p class="stat-label">Active Sessions</p>
+                <p class="stat-value">24</p>
+            </div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-icon">
+                <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                    stroke-linejoin="round">
+                    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                </svg>
+            </div>
+            <div>
+                <p class="stat-label">System Status</p>
+                <p class="stat-value" style="color: #10b981; font-size: 1.25rem;">Operational</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Business Grid -->
+    <section class="businesses-section">
+        <h2>Your Businesses</h2>
+        <div id="businessList" class="card-grid">
+            <!-- Businesses will load here -->
+        </div>
+    </section>
+    </main>
+    </div>
+
+    <!-- Modal -->
+    <div id="businessModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Add New Business</h2>
+                <button class="close-btn" id="closeModalBtn">
+                    <svg width="24" height="24" fill="none" stroke="currentColor" stroke-width="2"
+                        stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <form id="addBusinessForm">
+                <div class="form-group">
+                    <label for="name">Business Name</label>
+                    <input type="text" id="name" required placeholder="e.g. Muscat Burgers">
+                </div>
+                <div class="form-group">
+                    <label for="phoneNumber">WhatsApp Number (Twilio)</label>
+                    <input type="text" id="phoneNumber" required placeholder="e.g. whatsapp:+14155238886">
+                </div>
+                <div class="form-group">
+                    <label for="sheetId">Google Sheet ID</label>
+                    <input type="text" id="sheetId" required placeholder="The long ID from the Sheet URL">
+                </div>
+                <div class="form-group">
+                    <label for="systemInstruction">System Instruction (Persona)</label>
+                    <textarea id="systemInstruction" rows="5" required
+                        placeholder="You are a helpful assistant..."></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn-secondary" id="cancelBtn">Cancel</button>
+                    <button type="submit" class="btn-primary">Create Business</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script src="dashboard.js"></script>
+</body>
+
+</html>

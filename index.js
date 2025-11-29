@@ -3,6 +3,12 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const { MessagingResponse } = require('twilio').twiml;
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const connectDB = require('./db');
+const Business = require('./models/Business');
+const Admin = require('./models/Admin');
+const authMiddleware = require('./middleware/auth');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const {
     checkAvailability,
     bookAppointment,
@@ -14,9 +20,31 @@ const {
     getServices, addService, deleteService,
     getFAQ, addFAQ, deleteFAQ
 } = require('./tools');
+const { startScheduler } = require('./scheduler');
 
 const app = express();
 const port = process.env.PORT || 3000;
+
+// Connect to Database
+connectDB().then(async () => {
+    // Seed Admin User
+    try {
+        const adminExists = await Admin.findOne({ username: 'admin' });
+        if (!adminExists) {
+            const salt = await bcrypt.genSalt(10);
+            const defaultPassword = process.env.DEFAULT_ADMIN_PASSWORD || 'admin123';
+            const hashedPassword = await bcrypt.hash(defaultPassword, salt);
+            const admin = new Admin({
+                username: 'admin',
+                password: hashedPassword
+            });
+            await admin.save();
+            console.log('Default admin user created');
+        }
+    } catch (err) {
+        console.error('Error seeding admin:', err);
+    }
+});
 
 // Serve static files (Dashboard)
 app.use(express.static('public'));
@@ -28,10 +56,7 @@ const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 // Store conversation history in memory
 const sessions = {};
 
-// --- TOOLS ---
-// Tools are now imported from ./tools.js
-
-// Tool Definitions for Gemini
+// Tool Definitions for Gemini (Dynamic wrapper needed later, but definitions are static)
 const tools = [
     {
         function_declarations: [
@@ -117,53 +142,108 @@ const tools = [
     }
 ];
 
-const SYSTEM_INSTRUCTION = `
-You are Rayan, the friendly receptionist at Horizon Dental in Muscat, Al Khoud.
-Hours: 9:00 AM - 9:00 PM, Sat-Thu. Closed Friday.
+// --- AUTH ENDPOINTS ---
+app.post('/api/auth/login', async (req, res) => {
+    const { username, password } = req.body;
 
-**Goal**: Help patients book appointments and answer questions using your tools.
+    try {
+        let admin = await Admin.findOne({ username });
+        if (!admin) {
+            return res.status(400).json({ message: 'Invalid Credentials' });
+        }
 
-**Persona & Tone**:
-- **Identity**: You are a helpful, polite, and professional Omani receptionist.
-- **Dialect**: When speaking Arabic, you MUST use the Omani dialect. Use common Omani words and phrases such as "Hala", "Ahlan", "Marhaba", "Kayfak", "Maw", "Shu", "Tfadhal", "Inshallah", "Tamam".
-- **Tone**: Warm, welcoming, hospitable, and respectful. Avoid overly casual or slang terms that are unprofessional.
-- **Language**: Omani Arabic for Arabic speakers. English for English speakers.
+        const isMatch = await bcrypt.compare(password, admin.password);
+        if (!isMatch) {
+            return res.status(400).json({ message: 'Invalid Credentials' });
+        }
 
-**Rules**:
-1. **Check First**: Before booking or modifying, ALWAYS use \`check_availability(date)\` to see if the requested time is taken.
-2. **Book/Modify**: Use \`book_appointment\` or \`modify_appointment\` as requested.
-3. **Cancel**: Use \`cancel_appointment\` if the user wants to cancel.
-4. **Reminders**: Use \`get_appointment\` if the user asks for their appointment details.
-5. **Info**: Use \`get_doctor_info\`, \`get_service_price\`, or \`get_clinic_faq\` to answer questions.
-6. **Format**: Ask for Date (YYYY-MM-DD) and Time if not provided.
-7. **Context**: Today is ${new Date().toISOString().split('T')[0]}.
-`;
+        const payload = {
+            user: {
+                id: admin.id
+            }
+        };
 
-// --- API ENDPOINTS FOR DASHBOARD ---
-
-// Doctors
-app.get('/api/doctors', async (req, res) => {
-    const result = await getDoctors();
-    res.json(result.doctors || []);
+        jwt.sign(
+            payload,
+            process.env.JWT_SECRET,
+            { expiresIn: '24h' },
+            (err, token) => {
+                if (err) throw err;
+                res.json({ token });
+            }
+        );
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
 });
-app.post('/api/doctors', async (req, res) => res.json(await addDoctor(req.body.name, req.body.specialty, req.body.availability)));
-app.delete('/api/doctors', async (req, res) => res.json(await deleteDoctor(req.body.name)));
 
-// Services
-app.get('/api/services', async (req, res) => {
-    const result = await getServices();
-    res.json(result.services || []);
-});
-app.post('/api/services', async (req, res) => res.json(await addService(req.body.service, req.body.price, req.body.description)));
-app.delete('/api/services', async (req, res) => res.json(await deleteService(req.body.service)));
+// --- API ENDPOINTS FOR DASHBOARD (Needs Auth & Business Context in future) ---
+// For now, these will break or need to be updated to accept a business ID.
+// Disabling them temporarily or mocking them to prevent crash until Dashboard phase.
+app.get('/api/doctors', async (req, res) => res.json([]));
 
-// FAQ
-app.get('/api/faq', async (req, res) => {
-    const result = await getFAQ();
-    res.json(result.faq || []);
+// --- BUSINESS API ENDPOINTS ---
+
+// Get all businesses (Protected)
+app.get('/api/businesses', authMiddleware, async (req, res) => {
+    try {
+        const businesses = await Business.find();
+        res.json(businesses);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
 });
-app.post('/api/faq', async (req, res) => res.json(await addFAQ(req.body.question, req.body.answer)));
-app.delete('/api/faq', async (req, res) => res.json(await deleteFAQ(req.body.question)));
+
+// Create a business (Protected)
+app.post('/api/businesses', authMiddleware, async (req, res) => {
+    const business = new Business({
+        name: req.body.name,
+        phoneNumber: req.body.phoneNumber,
+        sheetId: req.body.sheetId,
+        systemInstruction: req.body.systemInstruction,
+        timezone: req.body.timezone || 'Asia/Muscat'
+    });
+
+    try {
+        const newBusiness = await business.save();
+        res.status(201).json(newBusiness);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Update a business (Protected)
+app.put('/api/businesses/:id', authMiddleware, async (req, res) => {
+    try {
+        const business = await Business.findById(req.params.id);
+        if (!business) return res.status(404).json({ message: 'Business not found' });
+
+        if (req.body.name) business.name = req.body.name;
+        if (req.body.phoneNumber) business.phoneNumber = req.body.phoneNumber;
+        if (req.body.sheetId) business.sheetId = req.body.sheetId;
+        if (req.body.systemInstruction) business.systemInstruction = req.body.systemInstruction;
+        if (req.body.timezone) business.timezone = req.body.timezone;
+
+        const updatedBusiness = await business.save();
+        res.json(updatedBusiness);
+    } catch (err) {
+        res.status(400).json({ message: err.message });
+    }
+});
+
+// Delete a business (Protected)
+app.delete('/api/businesses/:id', authMiddleware, async (req, res) => {
+    try {
+        const business = await Business.findById(req.params.id);
+        if (!business) return res.status(404).json({ message: 'Business not found' });
+
+        await business.deleteOne();
+        res.json({ message: 'Business deleted' });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
 
 app.use(bodyParser.urlencoded({ extended: false }));
 
@@ -171,26 +251,47 @@ app.use(bodyParser.urlencoded({ extended: false }));
 app.post('/whatsapp', async (req, res) => {
     const incomingMsg = req.body.Body;
     const sender = req.body.From;
+    const to = req.body.To; // The Twilio number receiving the message (e.g., whatsapp:+14155238886)
 
-    console.log(`Message from ${sender}: ${incomingMsg}`);
+    console.log(`Message from ${sender} to ${to}: ${incomingMsg}`);
 
     const twiml = new MessagingResponse();
 
     try {
+        // 1. Identify Business
+        // In Sandbox, 'To' is always the sandbox number. In prod, it's the business number.
+        // For testing, we can fallback to a default business if not found, or use a specific test number.
+        // Let's try to find by phone number, if not found, check if it's the sandbox number and use a default.
+        let business = await Business.findOne({ phoneNumber: to });
+
+        if (!business) {
+            // Fallback for Sandbox/Testing: Get the first business in DB
+            business = await Business.findOne({});
+            if (!business) {
+                twiml.message("System Error: No business configured.");
+                res.type('text/xml').send(twiml.toString());
+                return;
+            }
+        }
+
+        const sheetId = business.sheetId;
+        const systemInstruction = business.systemInstruction;
+
         // Get model with tools
         const model = genAI.getGenerativeModel({
             model: "gemini-2.5-flash",
-            systemInstruction: SYSTEM_INSTRUCTION,
+            systemInstruction: systemInstruction,
             tools: tools
         });
 
         // Start/Get Chat
-        if (!sessions[sender]) {
-            sessions[sender] = model.startChat({
+        const sessionKey = `${business._id}:${sender}`; // Unique session per business per user
+        if (!sessions[sessionKey]) {
+            sessions[sessionKey] = model.startChat({
                 history: [],
             });
         }
-        const chat = sessions[sender];
+        const chat = sessions[sessionKey];
 
         // Send message
         const result = await chat.sendMessage(incomingMsg);
@@ -204,22 +305,23 @@ app.post('/whatsapp', async (req, res) => {
             const call = functionCalls[0];
             let apiResponse;
 
+            // Pass sheetId to all tools
             if (call.name === "check_availability") {
-                apiResponse = await checkAvailability(call.args.date);
+                apiResponse = await checkAvailability(sheetId, call.args.date);
             } else if (call.name === "book_appointment") {
-                apiResponse = await bookAppointment(call.args.name, call.args.phone, call.args.date, call.args.time);
+                apiResponse = await bookAppointment(sheetId, call.args.name, call.args.phone, call.args.date, call.args.time);
             } else if (call.name === "get_appointment") {
-                apiResponse = await getAppointment(call.args.phone);
+                apiResponse = await getAppointment(sheetId, call.args.phone);
             } else if (call.name === "cancel_appointment") {
-                apiResponse = await cancelAppointment(call.args.phone, call.args.date);
+                apiResponse = await cancelAppointment(sheetId, call.args.phone, call.args.date);
             } else if (call.name === "modify_appointment") {
-                apiResponse = await modifyAppointment(call.args.phone, call.args.oldDate, call.args.newDate, call.args.newTime);
+                apiResponse = await modifyAppointment(sheetId, call.args.phone, call.args.oldDate, call.args.newDate, call.args.newTime);
             } else if (call.name === "get_doctor_info") {
-                apiResponse = await getDoctors();
+                apiResponse = await getDoctors(sheetId);
             } else if (call.name === "get_service_price") {
-                apiResponse = await getServices();
+                apiResponse = await getServices(sheetId);
             } else if (call.name === "get_clinic_faq") {
-                apiResponse = await getFAQ();
+                apiResponse = await getFAQ(sheetId);
             }
 
             // Send API result back to model to get final natural language response
@@ -239,16 +341,12 @@ app.post('/whatsapp', async (req, res) => {
         twiml.message(text);
     } catch (error) {
         console.error('Error:', error);
-        delete sessions[sender];
+        // delete sessions[sender]; // Cleanup might need adjustment
         twiml.message(`Sorry, I encountered an error. Please try again.`);
     }
 
     res.type('text/xml').send(twiml.toString());
 });
-
-const { startScheduler } = require('./scheduler');
-
-// ... (existing code)
 
 // Start Scheduler
 startScheduler();

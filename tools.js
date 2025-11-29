@@ -2,9 +2,6 @@ require('dotenv').config();
 const { GoogleSpreadsheet } = require('google-spreadsheet');
 const { JWT } = require('google-auth-library');
 
-// Initialize Google Sheets
-const SHEET_ID = process.env.GOOGLE_SHEET_ID || '1k-zYD8fGlyYNzFvZpVha7IeP_sZNd1ga-L5lLQ9D36U';
-
 let serviceAccountAuth;
 if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
     serviceAccountAuth = new JWT({
@@ -24,10 +21,10 @@ if (process.env.GOOGLE_CLIENT_EMAIL && process.env.GOOGLE_PRIVATE_KEY) {
         console.error("Failed to load credentials from env or service_account.json");
     }
 }
-const doc = new GoogleSpreadsheet(SHEET_ID, serviceAccountAuth);
 
 // Helper to get a specific sheet by title, creating it if it doesn't exist
-async function getSheet(title, headerValues) {
+async function getSheet(sheetId, title, headerValues) {
+    const doc = new GoogleSpreadsheet(sheetId, serviceAccountAuth);
     await doc.loadInfo();
     let sheet = doc.sheetsByTitle[title];
     if (!sheet) {
@@ -37,9 +34,9 @@ async function getSheet(title, headerValues) {
 }
 
 // --- APPOINTMENTS ---
-async function checkAvailability(date) {
+async function checkAvailability(sheetId, date) {
     try {
-        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
+        const sheet = await getSheet(sheetId, 'Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
         const bookedSlots = rows
@@ -58,9 +55,9 @@ async function checkAvailability(date) {
 }
 
 // Tool 2: Book Appointment
-async function bookAppointment(name, phone, date, time) {
+async function bookAppointment(sheetId, name, phone, date, time) {
     try {
-        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
+        const sheet = await getSheet(sheetId, 'Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         await sheet.addRow({
             Name: name,
             Phone: phone,
@@ -76,9 +73,9 @@ async function bookAppointment(name, phone, date, time) {
 }
 
 // Tool 3: Get Appointment (Reminder)
-async function getAppointment(phone) {
+async function getAppointment(sheetId, phone) {
     try {
-        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
+        const sheet = await getSheet(sheetId, 'Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
         // STRICT FILTERING by phone number for privacy
@@ -101,9 +98,9 @@ async function getAppointment(phone) {
     }
 }
 
-async function getAppointmentsByDate(date) {
+async function getAppointmentsByDate(sheetId, date) {
     try {
-        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
+        const sheet = await getSheet(sheetId, 'Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
         const appointments = rows
@@ -123,14 +120,11 @@ async function getAppointmentsByDate(date) {
 }
 
 // Tool 4: Cancel Appointment
-async function cancelAppointment(phone, date) {
+async function cancelAppointment(sheetId, phone, date) {
     try {
-        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
+        const sheet = await getSheet(sheetId, 'Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
-        // Find the appointment to delete
-        // We match both phone AND date to be safe, though phone should be unique enough if they only have one per day.
-        // Ideally we'd match time too, but let's assume one per day for now or just delete the first one found for that date.
         const rowToDelete = rows.find(row => row.get('Phone') === phone && row.get('Date') === date);
 
         if (!rowToDelete) {
@@ -146,9 +140,9 @@ async function cancelAppointment(phone, date) {
 }
 
 // Tool 5: Modify Appointment
-async function modifyAppointment(phone, oldDate, newDate, newTime) {
+async function modifyAppointment(sheetId, phone, oldDate, newDate, newTime) {
     try {
-        const sheet = await getSheet('Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
+        const sheet = await getSheet(sheetId, 'Appointments', ['Name', 'Phone', 'Date', 'Time', 'Status']);
         const rows = await sheet.getRows();
 
         // 1. Check if new slot is available
@@ -179,9 +173,9 @@ async function modifyAppointment(phone, oldDate, newDate, newTime) {
 // --- KNOWLEDGE BASE (CRUD) ---
 
 // 1. DOCTORS
-async function getDoctors() {
+async function getDoctors(sheetId) {
     try {
-        const sheet = await getSheet('Doctors', ['Name', 'Specialty', 'Availability']);
+        const sheet = await getSheet(sheetId, 'Doctors', ['Name', 'Specialty', 'Availability']);
         const rows = await sheet.getRows();
         const doctors = rows.map(row => ({
             name: row.get('Name'),
@@ -195,9 +189,9 @@ async function getDoctors() {
     }
 }
 
-async function addDoctor(name, specialty, availability) {
+async function addDoctor(sheetId, name, specialty, availability) {
     try {
-        const sheet = await getSheet('Doctors', ['Name', 'Specialty', 'Availability']);
+        const sheet = await getSheet(sheetId, 'Doctors', ['Name', 'Specialty', 'Availability']);
         await sheet.addRow({ Name: name, Specialty: specialty, Availability: availability });
         return { success: true };
     } catch (error) {
@@ -205,9 +199,9 @@ async function addDoctor(name, specialty, availability) {
     }
 }
 
-async function deleteDoctor(name) {
+async function deleteDoctor(sheetId, name) {
     try {
-        const sheet = await getSheet('Doctors', ['Name', 'Specialty', 'Availability']);
+        const sheet = await getSheet(sheetId, 'Doctors', ['Name', 'Specialty', 'Availability']);
         const rows = await sheet.getRows();
         const row = rows.find(r => r.get('Name') === name);
         if (row) await row.delete();
@@ -218,9 +212,9 @@ async function deleteDoctor(name) {
 }
 
 // 2. SERVICES
-async function getServices() {
+async function getServices(sheetId) {
     try {
-        const sheet = await getSheet('Services', ['Service', 'Price', 'Description']);
+        const sheet = await getSheet(sheetId, 'Services', ['Service', 'Price', 'Description']);
         const rows = await sheet.getRows();
         const services = rows.map(row => ({
             service: row.get('Service'),
@@ -234,9 +228,9 @@ async function getServices() {
     }
 }
 
-async function addService(service, price, description) {
+async function addService(sheetId, service, price, description) {
     try {
-        const sheet = await getSheet('Services', ['Service', 'Price', 'Description']);
+        const sheet = await getSheet(sheetId, 'Services', ['Service', 'Price', 'Description']);
         await sheet.addRow({ Service: service, Price: price, Description: description });
         return { success: true };
     } catch (error) {
@@ -244,9 +238,9 @@ async function addService(service, price, description) {
     }
 }
 
-async function deleteService(serviceName) {
+async function deleteService(sheetId, serviceName) {
     try {
-        const sheet = await getSheet('Services', ['Service', 'Price', 'Description']);
+        const sheet = await getSheet(sheetId, 'Services', ['Service', 'Price', 'Description']);
         const rows = await sheet.getRows();
         const row = rows.find(r => r.get('Service') === serviceName);
         if (row) await row.delete();
@@ -257,9 +251,9 @@ async function deleteService(serviceName) {
 }
 
 // 3. FAQ
-async function getFAQ() {
+async function getFAQ(sheetId) {
     try {
-        const sheet = await getSheet('FAQ', ['Question', 'Answer']);
+        const sheet = await getSheet(sheetId, 'FAQ', ['Question', 'Answer']);
         const rows = await sheet.getRows();
         const faq = rows.map(row => ({
             question: row.get('Question'),
@@ -272,9 +266,9 @@ async function getFAQ() {
     }
 }
 
-async function addFAQ(question, answer) {
+async function addFAQ(sheetId, question, answer) {
     try {
-        const sheet = await getSheet('FAQ', ['Question', 'Answer']);
+        const sheet = await getSheet(sheetId, 'FAQ', ['Question', 'Answer']);
         await sheet.addRow({ Question: question, Answer: answer });
         return { success: true };
     } catch (error) {
@@ -282,9 +276,9 @@ async function addFAQ(question, answer) {
     }
 }
 
-async function deleteFAQ(question) {
+async function deleteFAQ(sheetId, question) {
     try {
-        const sheet = await getSheet('FAQ', ['Question', 'Answer']);
+        const sheet = await getSheet(sheetId, 'FAQ', ['Question', 'Answer']);
         const rows = await sheet.getRows();
         const row = rows.find(r => r.get('Question') === question);
         if (row) await row.delete();

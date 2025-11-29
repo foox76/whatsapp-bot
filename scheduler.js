@@ -1,12 +1,12 @@
 require('dotenv').config();
 const cron = require('node-cron');
 const twilio = require('twilio');
+const Business = require('./models/Business');
 const { getAppointmentsByDate } = require('./tools');
 
 const accountSid = process.env.TWILIO_ACCOUNT_SID;
 const authToken = process.env.TWILIO_AUTH_TOKEN;
 const client = twilio(accountSid, authToken);
-const messagingServiceSid = process.env.TWILIO_MESSAGING_SERVICE_SID; // Optional, or use 'from' number
 
 // Helper to send WhatsApp message
 async function sendWhatsApp(to, body) {
@@ -33,11 +33,24 @@ async function sendReminders() {
     tomorrow.setDate(tomorrow.getDate() + 1);
     const dateStr = tomorrow.toISOString().split('T')[0];
 
-    const appointments = await getAppointmentsByDate(dateStr);
+    try {
+        const businesses = await Business.find();
+        console.log(`Processing reminders for ${businesses.length} businesses.`);
 
-    for (const appt of appointments) {
-        const msg = `Hala ${appt.name}! 🌟\nJust a friendly reminder about your appointment with Horizon Dental tomorrow at ${appt.time}.\nWe look forward to seeing you! Inshallah.`;
-        await sendWhatsApp(appt.phone, msg);
+        for (const business of businesses) {
+            try {
+                const appointments = await getAppointmentsByDate(business.sheetId, dateStr);
+
+                for (const appt of appointments) {
+                    const msg = `Hala ${appt.name}! 🌟\nJust a friendly reminder about your appointment with ${business.name} tomorrow at ${appt.time}.\nWe look forward to seeing you! Inshallah.`;
+                    await sendWhatsApp(appt.phone, msg);
+                }
+            } catch (err) {
+                console.error(`Error processing reminders for business ${business.name}:`, err);
+            }
+        }
+    } catch (err) {
+        console.error("Error fetching businesses for reminders:", err);
     }
 }
 
@@ -48,11 +61,24 @@ async function sendFollowUps() {
     yesterday.setDate(yesterday.getDate() - 1);
     const dateStr = yesterday.toISOString().split('T')[0];
 
-    const appointments = await getAppointmentsByDate(dateStr);
+    try {
+        const businesses = await Business.find();
+        console.log(`Processing follow-ups for ${businesses.length} businesses.`);
 
-    for (const appt of appointments) {
-        const msg = `Ahlan ${appt.name}! 👋\nWe hope your visit yesterday went well. If you have any questions or need further assistance, please let us know. Take care!`;
-        await sendWhatsApp(appt.phone, msg);
+        for (const business of businesses) {
+            try {
+                const appointments = await getAppointmentsByDate(business.sheetId, dateStr);
+
+                for (const appt of appointments) {
+                    const msg = `Ahlan ${appt.name}! 👋\nWe hope your visit to ${business.name} yesterday went well. If you have any questions or need further assistance, please let us know. Take care!`;
+                    await sendWhatsApp(appt.phone, msg);
+                }
+            } catch (err) {
+                console.error(`Error processing follow-ups for business ${business.name}:`, err);
+            }
+        }
+    } catch (err) {
+        console.error("Error fetching businesses for follow-ups:", err);
     }
 }
 
